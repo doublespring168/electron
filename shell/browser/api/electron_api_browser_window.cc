@@ -14,6 +14,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "shell/browser/api/electron_api_web_contents_view.h"
 #include "shell/browser/browser.h"
+#include "shell/browser/native_browser_view.h"
 #include "shell/browser/unresponsive_suppressor.h"
 #include "shell/browser/web_contents_preferences.h"
 #include "shell/browser/window_list.h"
@@ -31,7 +32,7 @@ namespace api {
 
 BrowserWindow::BrowserWindow(gin::Arguments* args,
                              const gin_helper::Dictionary& options)
-    : BaseWindow(args->isolate(), options), weak_factory_(this) {
+    : BaseWindow(args->isolate(), options) {
   // Use options.webPreferences in WebContents.
   v8::Isolate* isolate = args->isolate();
   gin_helper::Dictionary web_preferences =
@@ -94,7 +95,8 @@ BrowserWindow::BrowserWindow(gin::Arguments* args,
   SetContentView(gin::CreateHandle<View>(isolate, web_contents_view.get()));
 
 #if defined(OS_MAC)
-  OverrideNSWindowContentView(web_contents->managed_web_contents());
+  OverrideNSWindowContentView(
+      web_contents->inspectable_web_contents()->GetView());
 #endif
 
   // Init window after everything has been setup.
@@ -304,8 +306,13 @@ void BrowserWindow::OnWindowIsKeyChanged(bool is_key) {
 
 void BrowserWindow::OnWindowResize() {
 #if defined(OS_MAC)
-  if (!draggable_regions_.empty())
+  if (!draggable_regions_.empty()) {
     UpdateDraggableRegions(draggable_regions_);
+  } else {
+    for (NativeBrowserView* view : window_->browser_views()) {
+      view->UpdateDraggableRegions(view->GetDraggableRegions());
+    }
+  }
 #endif
   BaseWindow::OnWindowResize();
 }
@@ -367,6 +374,14 @@ void BrowserWindow::AddBrowserView(v8::Local<v8::Value> value) {
 void BrowserWindow::RemoveBrowserView(v8::Local<v8::Value> value) {
   BaseWindow::RemoveBrowserView(value);
 #if defined(OS_MAC)
+  UpdateDraggableRegions(draggable_regions_);
+#endif
+}
+
+void BrowserWindow::SetTopBrowserView(v8::Local<v8::Value> value,
+                                      gin_helper::Arguments* args) {
+  BaseWindow::SetTopBrowserView(value, args);
+#if defined(OS_MACOSX)
   UpdateDraggableRegions(draggable_regions_);
 #endif
 }

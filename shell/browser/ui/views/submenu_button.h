@@ -16,7 +16,7 @@ namespace electron {
 // Special button that used by menu bar to show submenus.
 class SubmenuButton : public views::MenuButton {
  public:
-  SubmenuButton(views::ButtonListener* button_listener,
+  SubmenuButton(PressedCallback callback,
                 const base::string16& title,
                 const SkColor& background_color);
   ~SubmenuButton() override;

@@ -25,7 +25,6 @@
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"  // nogncheck
 #include "content/browser/renderer_host/render_widget_host_delegate.h"  // nogncheck
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"  // nogncheck
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_factory.h"
@@ -183,11 +182,9 @@ OffScreenRenderWidgetHostView::OffScreenRenderWidgetHostView(
       frame_rate_(frame_rate),
       size_(initial_size),
       painting_(painting),
-      is_showing_(false),
       cursor_manager_(new content::CursorManager(this)),
       mouse_wheel_phase_handler_(this),
-      backing_(new SkBitmap),
-      weak_ptr_factory_(this) {
+      backing_(new SkBitmap) {
   DCHECK(render_widget_host_);
   DCHECK(!render_widget_host_->GetView());
 
@@ -243,13 +240,6 @@ OffScreenRenderWidgetHostView::~OffScreenRenderWidgetHostView() {
   delegated_frame_host_.reset();
   compositor_.reset();
   root_layer_.reset();
-}
-
-content::BrowserAccessibilityManager*
-OffScreenRenderWidgetHostView::CreateBrowserAccessibilityManager(
-    content::BrowserAccessibilityDelegate*,
-    bool) {
-  return nullptr;
 }
 
 void OffScreenRenderWidgetHostView::InitAsChild(gfx::NativeView) {
@@ -420,9 +410,6 @@ void OffScreenRenderWidgetHostView::InitAsPopup(
   Show();
 }
 
-void OffScreenRenderWidgetHostView::InitAsFullscreen(
-    content::RenderWidgetHostView*) {}
-
 void OffScreenRenderWidgetHostView::UpdateCursor(const content::WebCursor&) {}
 
 content::CursorManager* OffScreenRenderWidgetHostView::GetCursorManager() {
@@ -500,6 +487,14 @@ void OffScreenRenderWidgetHostView::TransformPointToRootSurface(
 gfx::Rect OffScreenRenderWidgetHostView::GetBoundsInRootWindow() {
   return gfx::Rect(size_);
 }
+
+base::Optional<content::DisplayFeature>
+OffScreenRenderWidgetHostView::GetDisplayFeature() {
+  return base::nullopt;
+}
+
+void OffScreenRenderWidgetHostView::SetDisplayFeatureForTesting(
+    const content::DisplayFeature* display_feature) {}
 
 viz::SurfaceId OffScreenRenderWidgetHostView::GetCurrentSurfaceId() const {
   return GetDelegatedFrameHost()
@@ -613,6 +608,10 @@ void OffScreenRenderWidgetHostView::ProxyViewDestroyed(
     OffscreenViewProxy* proxy) {
   proxy_views_.erase(proxy);
   Invalidate();
+}
+
+bool OffScreenRenderWidgetHostView::IsOffscreen() const {
+  return true;
 }
 
 std::unique_ptr<viz::HostDisplayClient>

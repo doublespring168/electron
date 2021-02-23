@@ -209,7 +209,8 @@ describe('app module', () => {
     });
   });
 
-  describe('app.requestSingleInstanceLock', () => {
+  // TODO(jeremy): figure out why these tests time out under ASan
+  ifdescribe(!process.env.IS_ASAN)('app.requestSingleInstanceLock', () => {
     it('prevents the second launch of app', async function () {
       this.timeout(120000);
       const appPath = path.join(fixturesPath, 'api', 'singleton');
@@ -551,46 +552,42 @@ describe('app module', () => {
     const platformIsNotSupported =
         (process.platform === 'win32') ||
         (process.platform === 'linux' && !app.isUnityRunning());
-    const platformIsSupported = !platformIsNotSupported;
 
     const expectedBadgeCount = 42;
 
     after(() => { app.badgeCount = 0; });
 
-    describe('on supported platform', () => {
-      it('with properties', () => {
+    ifdescribe(!platformIsNotSupported)('on supported platform', () => {
+      describe('with properties', () => {
         it('sets a badge count', function () {
-          if (platformIsNotSupported) return this.skip();
-
           app.badgeCount = expectedBadgeCount;
           expect(app.badgeCount).to.equal(expectedBadgeCount);
         });
       });
 
-      it('with functions', () => {
-        it('sets a badge count', function () {
-          if (platformIsNotSupported) return this.skip();
-
+      describe('with functions', () => {
+        it('sets a numerical badge count', function () {
           app.setBadgeCount(expectedBadgeCount);
           expect(app.getBadgeCount()).to.equal(expectedBadgeCount);
+        });
+        it('sets an non numeric (dot) badge count', function () {
+          app.setBadgeCount();
+          // Badge count should be zero when non numeric (dot) is requested
+          expect(app.getBadgeCount()).to.equal(0);
         });
       });
     });
 
-    describe('on unsupported platform', () => {
-      it('with properties', () => {
+    ifdescribe(process.platform !== 'win32' && platformIsNotSupported)('on unsupported platform', () => {
+      describe('with properties', () => {
         it('does not set a badge count', function () {
-          if (platformIsSupported) return this.skip();
-
           app.badgeCount = 9999;
           expect(app.badgeCount).to.equal(0);
         });
       });
 
-      it('with functions', () => {
+      describe('with functions', () => {
         it('does not set a badge count)', function () {
-          if (platformIsSupported) return this.skip();
-
           app.setBadgeCount(9999);
           expect(app.getBadgeCount()).to.equal(0);
         });
@@ -598,25 +595,33 @@ describe('app module', () => {
     });
   });
 
-  describe('app.get/setLoginItemSettings API', function () {
+  ifdescribe(process.platform !== 'linux' && !process.mas)('app.get/setLoginItemSettings API', function () {
     const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
     const processStartArgs = [
       '--processStart', `"${path.basename(process.execPath)}"`,
       '--process-start-args', '"--hidden"'
     ];
-
-    before(function () {
-      if (process.platform === 'linux' || process.mas) this.skip();
-    });
+    const regAddArgs = [
+      'ADD',
+      'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run',
+      '/v',
+      'additionalEntry',
+      '/t',
+      'REG_BINARY',
+      '/f',
+      '/d'
+    ];
 
     beforeEach(() => {
       app.setLoginItemSettings({ openAtLogin: false });
       app.setLoginItemSettings({ openAtLogin: false, path: updateExe, args: processStartArgs });
+      app.setLoginItemSettings({ name: 'additionalEntry', openAtLogin: false });
     });
 
     afterEach(() => {
       app.setLoginItemSettings({ openAtLogin: false });
       app.setLoginItemSettings({ openAtLogin: false, path: updateExe, args: processStartArgs });
+      app.setLoginItemSettings({ name: 'additionalEntry', openAtLogin: false });
     });
 
     ifit(process.platform !== 'win32')('sets and returns the app as a login item', function () {
@@ -631,7 +636,7 @@ describe('app module', () => {
     });
 
     ifit(process.platform === 'win32')('sets and returns the app as a login item (windows)', function () {
-      app.setLoginItemSettings({ openAtLogin: true });
+      app.setLoginItemSettings({ openAtLogin: true, enabled: true });
       expect(app.getLoginItemSettings()).to.deep.equal({
         openAtLogin: true,
         openAsHidden: false,
@@ -645,6 +650,24 @@ describe('app module', () => {
           args: [],
           scope: 'user',
           enabled: true
+        }]
+      });
+
+      app.setLoginItemSettings({ openAtLogin: false });
+      app.setLoginItemSettings({ openAtLogin: true, enabled: false });
+      expect(app.getLoginItemSettings()).to.deep.equal({
+        openAtLogin: true,
+        openAsHidden: false,
+        wasOpenedAtLogin: false,
+        wasOpenedAsHidden: false,
+        restoreState: false,
+        executableWillLaunchAtLogin: false,
+        launchItems: [{
+          name: 'electron.app.Electron',
+          path: process.execPath,
+          args: [],
+          scope: 'user',
+          enabled: false
         }]
       });
     });
@@ -775,6 +798,117 @@ describe('app module', () => {
           enabled: true
         }]
       });
+    });
+
+    ifit(process.platform === 'win32')('finds launch items independent of args', function () {
+      app.setLoginItemSettings({ openAtLogin: true, args: ['arg1'] });
+      app.setLoginItemSettings({ openAtLogin: true, name: 'additionalEntry', enabled: false, args: ['arg2'] });
+      expect(app.getLoginItemSettings()).to.deep.equal({
+        openAtLogin: false,
+        openAsHidden: false,
+        wasOpenedAtLogin: false,
+        wasOpenedAsHidden: false,
+        restoreState: false,
+        executableWillLaunchAtLogin: true,
+        launchItems: [{
+          name: 'additionalEntry',
+          path: process.execPath,
+          args: ['arg2'],
+          scope: 'user',
+          enabled: false
+        }, {
+          name: 'electron.app.Electron',
+          path: process.execPath,
+          args: ['arg1'],
+          scope: 'user',
+          enabled: true
+        }]
+      });
+    });
+
+    ifit(process.platform === 'win32')('finds launch items independent of path quotation or casing', function () {
+      const expectation = {
+        openAtLogin: false,
+        openAsHidden: false,
+        wasOpenedAtLogin: false,
+        wasOpenedAsHidden: false,
+        restoreState: false,
+        executableWillLaunchAtLogin: true,
+        launchItems: [{
+          name: 'additionalEntry',
+          path: 'C:\\electron\\myapp.exe',
+          args: ['arg1'],
+          scope: 'user',
+          enabled: true
+        }]
+      };
+
+      app.setLoginItemSettings({ openAtLogin: true, name: 'additionalEntry', enabled: true, path: 'C:\\electron\\myapp.exe', args: ['arg1'] });
+      expect(app.getLoginItemSettings({ path: '"C:\\electron\\MYAPP.exe"' })).to.deep.equal(expectation);
+
+      app.setLoginItemSettings({ openAtLogin: false, name: 'additionalEntry' });
+      app.setLoginItemSettings({ openAtLogin: true, name: 'additionalEntry', enabled: true, path: '"C:\\electron\\MYAPP.exe"', args: ['arg1'] });
+      expect(app.getLoginItemSettings({ path: 'C:\\electron\\myapp.exe' })).to.deep.equal({
+        ...expectation,
+        launchItems: [
+          {
+            name: 'additionalEntry',
+            path: 'C:\\electron\\MYAPP.exe',
+            args: ['arg1'],
+            scope: 'user',
+            enabled: true
+          }
+        ]
+      });
+    });
+
+    ifit(process.platform === 'win32')('detects disabled by TaskManager', async function () {
+      app.setLoginItemSettings({ openAtLogin: true, name: 'additionalEntry', enabled: true, args: ['arg1'] });
+      const appProcess = cp.spawn('reg', [...regAddArgs, '030000000000000000000000']);
+      await emittedOnce(appProcess, 'exit');
+      expect(app.getLoginItemSettings()).to.deep.equal({
+        openAtLogin: false,
+        openAsHidden: false,
+        wasOpenedAtLogin: false,
+        wasOpenedAsHidden: false,
+        restoreState: false,
+        executableWillLaunchAtLogin: false,
+        launchItems: [{
+          name: 'additionalEntry',
+          path: process.execPath,
+          args: ['arg1'],
+          scope: 'user',
+          enabled: false
+        }]
+      });
+    });
+
+    ifit(process.platform === 'win32')('detects enabled by TaskManager', async function () {
+      const expectation = {
+        openAtLogin: false,
+        openAsHidden: false,
+        wasOpenedAtLogin: false,
+        wasOpenedAsHidden: false,
+        restoreState: false,
+        executableWillLaunchAtLogin: true,
+        launchItems: [{
+          name: 'additionalEntry',
+          path: process.execPath,
+          args: ['arg1'],
+          scope: 'user',
+          enabled: true
+        }]
+      };
+
+      app.setLoginItemSettings({ openAtLogin: true, name: 'additionalEntry', enabled: false, args: ['arg1'] });
+      let appProcess = cp.spawn('reg', [...regAddArgs, '020000000000000000000000']);
+      await emittedOnce(appProcess, 'exit');
+      expect(app.getLoginItemSettings()).to.deep.equal(expectation);
+
+      app.setLoginItemSettings({ openAtLogin: true, name: 'additionalEntry', enabled: false, args: ['arg1'] });
+      appProcess = cp.spawn('reg', [...regAddArgs, '000000000000000000000000']);
+      await emittedOnce(appProcess, 'exit');
+      expect(app.getLoginItemSettings()).to.deep.equal(expectation);
     });
   });
 
@@ -1321,7 +1455,8 @@ describe('app module', () => {
     });
 
     describe('when app.enableSandbox() is called', () => {
-      it('adds --enable-sandbox to all renderer processes', done => {
+      // TODO(jeremy): figure out why this times out under ASan
+      ifit(!process.env.IS_ASAN)('adds --enable-sandbox to all renderer processes', done => {
         const appPath = path.join(fixturesPath, 'api', 'mixed-sandbox-app');
         appProcess = cp.spawn(process.execPath, [appPath, '--app-enable-sandbox']);
 
@@ -1346,7 +1481,8 @@ describe('app module', () => {
     });
 
     describe('when the app is launched with --enable-sandbox', () => {
-      it('adds --enable-sandbox to all renderer processes', done => {
+      // TODO(jeremy): figure out why this times out under ASan
+      ifit(!process.env.IS_ASAN)('adds --enable-sandbox to all renderer processes', done => {
         const appPath = path.join(fixturesPath, 'api', 'mixed-sandbox-app');
         appProcess = cp.spawn(process.execPath, [appPath, '--enable-sandbox']);
 
@@ -1397,6 +1533,15 @@ describe('app module', () => {
         app.dock.setMenu(new Menu());
         const v8Util = process._linkedBinding('electron_common_v8_util');
         v8Util.requestGarbageCollectionForTesting();
+      });
+    });
+
+    describe('dock.setIcon', () => {
+      it('throws a descriptive error for a bad icon path', () => {
+        const badPath = path.resolve('I', 'Do', 'Not', 'Exist');
+        expect(() => {
+          app.dock.setIcon(badPath);
+        }).to.throw(/Failed to load image from path (.+)/);
       });
     });
 

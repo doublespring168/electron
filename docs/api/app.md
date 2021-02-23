@@ -406,6 +406,9 @@ Returns:
     * `oom` - Process ran out of memory
     * `launch-failed` - Process never successfully launched
     * `integrity-failure` - Windows code integrity checks failed
+  * `exitCode` Integer - The exit code of the process, unless `reason` is
+    `launch-failed`, in which case `exitCode` will be a platform-specific
+    launch failure error code.
 
 Emitted when the renderer process unexpectedly disappears.  This is normally
 because it was crashed or killed.
@@ -859,9 +862,10 @@ This method returns the application name of the default handler for the protocol
   minimum (e.g. `https://`).
 
 Returns `Promise<Object>` - Resolve with an object containing the following:
-  * `icon` NativeImage - the display icon of the app handling the protocol.
-  * `path` String  - installation path of the app handling the protocol.
-  * `name` String - display name of the app handling the protocol.
+
+* `icon` NativeImage - the display icon of the app handling the protocol.
+* `path` String  - installation path of the app handling the protocol.
+* `name` String - display name of the app handling the protocol.
 
 This method returns a promise that contains the application name, icon and path of the default handler for the protocol
 (aka URI scheme) of a URL.
@@ -1091,6 +1095,7 @@ Changes the [Application User Model ID][app-user-model-id] to `id`.
 Sets the activation policy for a given app.
 
 Activation policy types:
+
 * 'regular' - The application is an ordinary app that appears in the Dock and may have a user interface.
 * 'accessory' - The application doesn’t appear in the Dock and doesn’t have a menu bar, but it may be activated programmatically or by clicking on one of its windows.
 * 'prohibited' - The application doesn’t appear in the Dock and may not create windows or be activated.
@@ -1105,7 +1110,7 @@ Activation policy types:
 
 Imports the certificate in pkcs12 format into the platform certificate store.
 `callback` is called with the `result` of import operation, a value of `0`
-indicates success while any other value indicates failure according to Chromium [net_error_list](https://code.google.com/p/chromium/codesearch#chromium/src/net/base/net_error_list.h).
+indicates success while any other value indicates failure according to Chromium [net_error_list](https://source.chromium.org/chromium/chromium/src/+/master:net/base/net_error_list.h).
 
 ### `app.disableHardwareAcceleration()`
 
@@ -1142,6 +1147,7 @@ For `infoType` equal to `complete`:
 
 For `infoType` equal to `basic`:
   Promise is fulfilled with `Object` containing fewer attributes than when requested with `complete`. Here's an example of basic response:
+
 ```js
 {
   auxAttributes:
@@ -1171,9 +1177,9 @@ For `infoType` equal to `basic`:
 
 Using `basic` should be preferred if only basic information like `vendorId` or `driverId` is needed.
 
-### `app.setBadgeCount(count)` _Linux_ _macOS_
+### `app.setBadgeCount([count])` _Linux_ _macOS_
 
-* `count` Integer
+* `count` Integer (optional) - If a value is provided, set the badge to the provided value otherwise, on macOS, display a plain white dot (e.g. unknown number of notifications). On Linux, if a value is not provided the badge will not display.
 
 Returns `Boolean` - Whether the call succeeded.
 
@@ -1342,7 +1348,7 @@ systems Application folder. Use in combination with `app.moveToApplicationsFolde
 ### `app.moveToApplicationsFolder([options])` _macOS_
 
 * `options` Object (optional)
-  * `conflictHandler` Function<Boolean> (optional) - A handler for potential conflict in move failure.
+  * `conflictHandler` Function\<Boolean> (optional) - A handler for potential conflict in move failure.
     * `conflictType` String - The type of move conflict encountered by the handler; can be `exists` or `existsAndRunning`, where `exists` means that an app of the same name is present in the Applications directory and `existsAndRunning` means both that it exists and that it's presently running.
 
 Returns `Boolean` - Whether the move was successful. Please note that if
@@ -1486,3 +1492,12 @@ which native modules you can use in the renderer process.  For more information
 on the direction Electron is going with renderer process restarts and usage of
 native modules in the renderer process please check out this
 [Tracking Issue](https://github.com/electron/electron/issues/18397).
+
+### `app.runningUnderRosettaTranslation` _macOS_ _Readonly_
+
+A `Boolean` which when `true` indicates that the app is currently running
+under the [Rosetta Translator Environment](https://en.wikipedia.org/wiki/Rosetta_(software)).
+
+You can use this property to prompt users to download the arm64 version of
+your application when they are running the x64 version under Rosetta
+incorrectly.

@@ -619,9 +619,6 @@ void Session::SetCertVerifyProc(v8::Local<v8::Value> val,
   content::BrowserContext::GetDefaultStoragePartition(browser_context_)
       ->GetNetworkContext()
       ->SetCertVerifierClient(std::move(cert_verifier_client_remote));
-
-  // This causes the cert verifier cache to be cleared.
-  content::GetNetworkService()->OnCertDBChanged();
 }
 
 void Session::SetPermissionRequestHandler(v8::Local<v8::Value> val,
@@ -784,14 +781,13 @@ void Session::CreateInterruptedDownload(const gin_helper::Dictionary& options) {
       length, last_modified, etag, base::Time::FromDoubleT(start_time)));
 }
 
-void Session::SetPreloads(
-    const std::vector<base::FilePath::StringType>& preloads) {
+void Session::SetPreloads(const std::vector<base::FilePath>& preloads) {
   auto* prefs = SessionPreferences::FromBrowserContext(browser_context());
   DCHECK(prefs);
   prefs->set_preloads(preloads);
 }
 
-std::vector<base::FilePath::StringType> Session::GetPreloads() const {
+std::vector<base::FilePath> Session::GetPreloads() const {
   auto* prefs = SessionPreferences::FromBrowserContext(browser_context());
   DCHECK(prefs);
   return prefs->preloads();
@@ -799,7 +795,8 @@ std::vector<base::FilePath::StringType> Session::GetPreloads() const {
 
 #if BUILDFLAG(ENABLE_ELECTRON_EXTENSIONS)
 v8::Local<v8::Promise> Session::LoadExtension(
-    const base::FilePath& extension_path) {
+    const base::FilePath& extension_path,
+    gin::Arguments* args) {
   v8::Isolate* isolate = JavascriptEnvironment::GetIsolate();
   gin_helper::Promise<const extensions::Extension*> promise(isolate);
   v8::Local<v8::Promise> handle = promise.GetHandle();
@@ -816,10 +813,19 @@ v8::Local<v8::Promise> Session::LoadExtension(
     return handle;
   }
 
+  int load_flags = extensions::Extension::FOLLOW_SYMLINKS_ANYWHERE;
+  gin_helper::Dictionary options;
+  if (args->GetNext(&options)) {
+    bool allowFileAccess = false;
+    options.Get("allowFileAccess", &allowFileAccess);
+    if (allowFileAccess)
+      load_flags |= extensions::Extension::ALLOW_FILE_ACCESS;
+  }
+
   auto* extension_system = static_cast<extensions::ElectronExtensionSystem*>(
       extensions::ExtensionSystem::Get(browser_context()));
   extension_system->LoadExtension(
-      extension_path,
+      extension_path, load_flags,
       base::BindOnce(
           [](gin_helper::Promise<const extensions::Extension*> promise,
              const extensions::Extension* extension,
@@ -1078,6 +1084,17 @@ bool Session::RemoveWordFromSpellCheckerDictionary(const std::string& word) {
 #endif
   return service->GetCustomDictionary()->RemoveWord(word);
 }
+
+void Session::SetSpellCheckerEnabled(bool b) {
+  browser_context_->prefs()->SetBoolean(spellcheck::prefs::kSpellCheckEnable,
+                                        b);
+}
+
+bool Session::IsSpellCheckerEnabled() const {
+  return browser_context_->prefs()->GetBoolean(
+      spellcheck::prefs::kSpellCheckEnable);
+}
+
 #endif  // BUILDFLAG(ENABLE_BUILTIN_SPELLCHECKER)
 
 // static
@@ -1180,6 +1197,10 @@ gin::ObjectTemplateBuilder Session::GetObjectTemplateBuilder(
                  &Session::AddWordToSpellCheckerDictionary)
       .SetMethod("removeWordFromSpellCheckerDictionary",
                  &Session::RemoveWordFromSpellCheckerDictionary)
+      .SetMethod("setSpellCheckerEnabled", &Session::SetSpellCheckerEnabled)
+      .SetMethod("isSpellCheckerEnabled", &Session::IsSpellCheckerEnabled)
+      .SetProperty("spellCheckerEnabled", &Session::IsSpellCheckerEnabled,
+                   &Session::SetSpellCheckerEnabled)
 #endif
       .SetMethod("preconnect", &Session::Preconnect)
       .SetMethod("closeAllConnections", &Session::CloseAllConnections)

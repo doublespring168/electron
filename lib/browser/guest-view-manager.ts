@@ -197,7 +197,7 @@ const attachGuest = function (event: Electron.IpcMainInvokeEvent,
   // Inherit certain option values from embedder
   const lastWebPreferences = embedder.getLastWebPreferences();
   for (const [name, value] of inheritedWebPreferences) {
-    if ((lastWebPreferences as any)[name] === value) {
+    if (lastWebPreferences[name as keyof Electron.WebPreferences] === value) {
       (webPreferences as any)[name] = value;
     }
   }
@@ -276,7 +276,7 @@ const watchEmbedder = function (embedder: Electron.WebContents) {
 
 const isWebViewTagEnabledCache = new WeakMap();
 
-export const isWebViewTagEnabled = function (contents: Electron.WebContents) {
+const isWebViewTagEnabled = function (contents: Electron.WebContents) {
   if (!isWebViewTagEnabledCache.has(contents)) {
     const webPreferences = contents.getLastWebPreferences() || {};
     isWebViewTagEnabledCache.set(contents, !!webPreferences.webviewTag);

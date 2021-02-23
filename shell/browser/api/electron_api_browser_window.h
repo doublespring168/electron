@@ -63,6 +63,9 @@ class BrowserWindow : public BaseWindow,
   void OnActivateContents() override;
   void OnPageTitleUpdated(const base::string16& title,
                           bool explicit_set) override;
+#if defined(OS_MAC)
+  void OnDevToolsResized() override;
+#endif
 
   // NativeWindowObserver:
   void RequestPreferredWidth(int* width) override;
@@ -81,6 +84,8 @@ class BrowserWindow : public BaseWindow,
   void SetBrowserView(v8::Local<v8::Value> value) override;
   void AddBrowserView(v8::Local<v8::Value> value) override;
   void RemoveBrowserView(v8::Local<v8::Value> value) override;
+  void SetTopBrowserView(v8::Local<v8::Value> value,
+                         gin_helper::Arguments* args) override;
   void ResetBrowserViews() override;
   void SetVibrancy(v8::Isolate* isolate, v8::Local<v8::Value> value) override;
   void OnWindowShow() override;
@@ -94,7 +99,7 @@ class BrowserWindow : public BaseWindow,
 
  private:
 #if defined(OS_MAC)
-  void OverrideNSWindowContentView(InspectableWebContents* iwc);
+  void OverrideNSWindowContentView(InspectableWebContentsView* webView);
 #endif
 
   // Helpers.
@@ -123,7 +128,7 @@ class BrowserWindow : public BaseWindow,
   v8::Global<v8::Value> web_contents_;
   base::WeakPtr<api::WebContents> api_web_contents_;
 
-  base::WeakPtrFactory<BrowserWindow> weak_factory_;
+  base::WeakPtrFactory<BrowserWindow> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserWindow);
 };
